@@ -1,19 +1,42 @@
+""" python extract_data.py
+You need to set the DATASET_PATH and other constants. Produces a *.npz.
+"""
+
 from spectral import Mel  # you need https://github.com/mwv/spectral
 import numpy as np
 from scipy.io import wavfile
-from collections import defaultdict
+from collections import defaultdict, Counter
 import glob
+
+DATASET_PATH = "/Users/gabrielsynnaeve/Dropbox/Monkey Sounds/Blue Monkey/*[WAV|wav]"
+OUTPUT_FILE = "blue_monkeys"
+GLOBAL_NORMALIZE = False  # global normalize => not at the file level
+STACK = 42  # in frames
+STRIDE = 21  # in frames
 
 def parse_textgrid(fname):
     with open(fname) as f:
-        l = f.readline()
+        l = f.readlines()
     res = defaultdict(lambda: [])
     for i, line in enumerate(l):
         if 'text = ' in line:
-            label = line.split('=')[1].strip(' "')
+            line = line.rstrip('\n')
+            label = line.split('=')[1].strip().strip('"').rstrip('"').strip()
             if label != "":
                 res[label].append((float(l[i-2].split('=')[1]),
                     float(l[i-1].split('=')[1])))
+    return res
+
+
+def vote_labels(l, length, stride, stack):
+    res = np.ndarray((length,), dtype=l.dtype)
+    for i in xrange(res.shape[0]):
+        c = Counter(l[i*stride:i*stride + stack])
+        tmp = sorted(c.items(), key=lambda x: x[1])
+        best = tmp[-1][0]
+        #if best == 'not_annotated' and len(tmp) > 1:
+        #    best = tmp[-2][0]
+        res[i] = best
     return res
 
 
@@ -21,11 +44,15 @@ nfbanks = 40
 wfbanks = 0.025 # 25ms
 rfbanks = 100 # 10ms
 
-all_sounds = []
+sounds = []
+strided_sounds = []
 all_annotations = []
+all_strided_annotations = []
 
-for wavfname in glob.iglob("../Blue Monkey/*.WAV"):
-    if "0B." in wavfname: # bugged file TODO
+for wavfname in glob.glob(DATASET_PATH):
+    annotfname = '.'.join(wavfname.split('.')[:-1]) + '.TextGrid'
+    if not len(glob.glob(annotfname)):
+        "no textgrid for this file", wavfname, annotfname  # TODO do something
         continue
 
     srate, sound = wavfile.read(wavfname)
@@ -40,24 +67,54 @@ for wavfname in glob.iglob("../Blue Monkey/*.WAV"):
             )
     fbank = fbanks.transform(sound)[0]  # first dimension is for
                                         # deltas & deltasdeltas
-    all_sounds.append(fbank)
+    if not GLOBAL_NORMALIZE:
+        fbank = (fbank - fbank.mean(axis=0)) / fbank.std(axis=0)
+    sounds.append(fbank)
     print fbank.shape
 
     annotations = ["not_annotated" for _ in xrange(fbank.shape[0])]
     annotations = np.array(annotations)
-    try:
-        annotfname = '.'.join(wavfname.split('.')[:-1]) + '.TextGrid'
-        d = parse_textgrid(annotfname)
-        for label, timings in d.iteritems():
-            for start, end in timings:
-                annotations[start*rfbanks:end*rfbanks] = label
-    except IOError:
-        "no textgrid for this file", wavfname, annotfname  # TODO do something
+    d = parse_textgrid(annotfname)
+    for label, timings in d.iteritems():
+        for start, end in timings:
+            annotations[start*rfbanks:end*rfbanks] = label
     all_annotations.append(annotations)
+    print annotations.shape
+
+    strided = np.zeros(((fbank.shape[0] + STRIDE - 1)/STRIDE,
+        fbank.shape[1] * STACK))
+    for i in xrange(strided.shape[0]):
+        tmp = fbank[i*STRIDE:i*STRIDE + STACK].flatten()
+        if tmp.shape[0] < STACK * nfbanks:
+            tmp = np.pad(tmp, (0, STACK*nfbanks - tmp.shape[0]), mode="constant")
+        strided[i] = tmp
+    if not GLOBAL_NORMALIZE:
+        strided = (strided - strided.mean(axis=0)) / strided.std(axis=0)
+    strided_sounds.append(strided)
+    print strided.shape
+
+    labels_strided = vote_labels(annotations, strided.shape[0], STRIDE, STACK)
+    print labels_strided.shape
+    all_strided_annotations.append(labels_strided)
+    
 
 
-np.savez("blue_monkeys.npz", fbanks=np.concatenate(all_sounds, axis=0),
-        labels=np.concatenate(all_annotations, axis=0))
+sounds = np.concatenate(sounds, axis=0)
+strided_sounds = np.concatenate(strided_sounds, axis=0)
+if GLOBAL_NORMALIZE:
+    sounds = (sounds - sounds.mean(axis=0)) / sounds.std(axis=0)
+    strided_sounds = (strided_sounds - strided_sounds.mean(axis=0)) / strided_sounds.std(axis=0)
+print sounds.shape
+print strided_sounds.shape
+np.savez_compressed(OUTPUT_FILE, fbanks=sounds,
+        labels=np.concatenate(all_annotations, axis=0),
+        strided=strided_sounds,
+        labels_strided=np.concatenate(all_strided_annotations),
+        stride=STRIDE,
+        stack=STACK,
+        nfbanks=nfbanks,
+        wfbanks=wfbanks,
+        rfbanks=rfbanks)
 
 
 
