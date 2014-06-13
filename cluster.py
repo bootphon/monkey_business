@@ -1,27 +1,12 @@
 import numpy as np
 from sklearn import mixture, cluster, metrics
+from extract_data import load_from_npz
 
 fname = "blue_monkeys.npz"
 
+fbanks, labels, strided, labels_strided, stride, labels_set = load_from_npz(
+        fname)
 
-d = np.load(fname)
-fbanks = d['fbanks']
-labels = d['labels']
-strided = d['strided']
-labels_strided = d['labels_strided']
-stride = d['stride']
-print "stride", stride
-print labels_strided.shape[0]
-print strided.shape
-labels_set = set(labels_strided)
-print labels_set
-
-print "loaded:", fname
-
-
-select = np.logical_or(labels_strided=="p", labels_strided=="h") # TODO remove
-strided = strided[select]
-labels_strided = labels_strided[select]
 
 kmeans = cluster.KMeans(init='k-means++', n_clusters=2, # len(labels_set)+1
         n_init=10)
