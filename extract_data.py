@@ -11,8 +11,8 @@ import glob
 DATASET_PATH = "/Users/gabrielsynnaeve/ownCloud/Shared/Monkey Sounds/Blue Monkeys/*[WAV|wav]"
 OUTPUT_FILE = "blue_monkeys"
 GLOBAL_NORMALIZE = False  # global normalize => not at the file level
-STACK = 42  # in frames
-STRIDE = 21  # in frames
+STACK = 20  # in frames
+STRIDE = 10  # in frames
 nfbanks = 40
 wfbanks = 0.025 # 25ms
 rfbanks = 100 # 10ms
@@ -51,6 +51,18 @@ def more_than_half_frame_labels(l, length, stride, stack):
         tmp = sorted(c.items(), key=lambda x: x[1])
         best = "not_annotated"
         if tmp[-1][1] >= stride:
+            best = tmp[-1][0]
+        res[i] = best
+    return res
+
+
+def more_than_ratio_frame_labels(l, length, stride, stack, ratio):
+    res = np.ndarray((length,), dtype=l.dtype)
+    for i in xrange(res.shape[0]):
+        c = Counter(l[i*stride:i*stride + stack])
+        tmp = sorted(c.items(), key=lambda x: x[1])
+        best = "not_annotated"
+        if tmp[-1][1] > ratio * stack:
             best = tmp[-1][0]
         res[i] = best
     return res
@@ -124,8 +136,8 @@ if __name__ == "__main__":
         print strided.shape
 
         #labels_strided = vote_labels(annotations, strided.shape[0], STRIDE, STACK)
-        labels_strided = more_than_half_frame_labels(annotations, strided.shape[0],
-                STRIDE, STACK)
+        labels_strided = more_than_ratio_frame_labels(annotations, 
+                strided.shape[0], STRIDE, STACK, ratio=0.5)
         print labels_strided.shape
         all_strided_annotations.append(labels_strided)
 
