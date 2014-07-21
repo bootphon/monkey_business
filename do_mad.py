@@ -50,8 +50,8 @@ def pred_Lambdas(monkey, n_cores=20):
     return dict(p)
 
 BASEDIR = path.join(os.environ['HOME'], 'data', 'monkey_sounds')
-# MONKEYS = ['Titi_monkeys', 'Blue_monkeys', 'colobus', 'gibbons']
-MONKEYS = ['Titi_monkeys', 'Blue_monkeys']
+MONKEYS = ['Titi_monkeys', 'Blue_monkeys', 'colobus', 'gibbons']
+# MONKEYS = ['Titi_monkeys', 'Blue_monkeys']
 NCORES = 20
 
 if __name__ == '__main__':
