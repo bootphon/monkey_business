@@ -30,7 +30,7 @@ import numpy as np
 
 MONKEYS = ['Titi_monkeys', 'Blue_monkeys', 'colobus']
 
-from corpus import BASEDIR, load_data_stacked
+from data import BASEDIR, load_data_stacked
 
 def load_all_monkeys():
     """Load stacked data for all monkeys.

@@ -12,7 +12,7 @@ requirements
 
 [scipy](http://www.scipy.org)
 
-[scikit-learn](http://www.scikit-learn.org)
+[scikit-learn](http://scikit-learn.org)
 
 [scikits.audiolab](https://pypi.python.org/pypi/scikits.audiolab)
 

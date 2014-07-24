@@ -20,9 +20,9 @@ import os
 import os.path as path
 import fnmatch
 from collections import namedtuple, defaultdict
-from itertools import imap
+from itertools import imap, chain, combinations
 import warnings
-from functools import Counter
+from collections import Counter
 from operator import add
 
 import numpy as np
@@ -71,6 +71,42 @@ def get_annotation(monkey, include_noise=False):
     return annot
 
 
+def stack_up(spec, start_frame, nframes):
+    nfilt = spec.shape[1]
+    x = spec[start_frame: start_frame + nframes].flatten()
+    if x.shape[0] < nframes * nfilt:
+        x = np.pad(x, (0, nframes * nfilt - x.shape[0]), mode='constant')
+    return x
+
+
+def stack_all(a, nframes):
+    return np.hstack(np.roll(a, -i, 0)
+                     for i in xrange(nframes))[:a.shape[0] - nframes + 1]
+
+
+def load_data_stacked_annot(monkey, annot, encoder, nframes):
+    labelset = sorted(list(set(f.mark for fname in annot
+                               for f in annot[fname])))
+    label2idx = dict(zip(labelset, range(len(labelset))))
+    nsamples = sum(imap(len, annot.itervalues()))
+
+    frate = encoder.config['frate']
+    nfilt = encoder.config['nfilt']
+    X = np.empty((nsamples, nframes * nfilt),
+                 dtype=np.double)
+    y = np.empty((nsamples,), dtype=np.uint8)
+    idx = 0
+    for fname in annot:
+        spec = load_wav(path.join(BASEDIR, monkey, 'audio', fname + '.wav'),
+                        encoder)
+        for fragment in annot[fname]:
+            X[idx] = stack_up(spec, int(fragment.interval.start * frate),
+                              nframes)
+            y[idx] = label2idx[fragment.mark]
+            idx += 1
+    return X[:idx], y[:idx], labelset
+
+
 def load_data_stacked(monkey, nframes=30, nfilt=40, include_noise=False,
                       min_samples=50):
     """Loads audio data for monkey as stacked
@@ -88,40 +124,22 @@ def load_data_stacked(monkey, nframes=30, nfilt=40, include_noise=False,
       labelset: list of call names (maps onto ints in y)
     """
     annot = get_annotation(monkey, include_noise=include_noise)
-    # do some filtering to get rid of weird labels in titi monkeys
     counts = reduce(add, (Counter(f.mark for f in annot[fname])
                           for fname in annot))
     annot = {k: [f for f in v if counts[f.mark] >= min_samples]
              for k, v in annot.iteritems()}
-    labelset = sorted(k for k in counts if counts[k] >= min_samples)
-    label2idx = dict(zip(labelset, range(len(labelset))))
-    nsamples = sum(imap(len, annot.itervalues()))
+    # labelset = sorted(list(set(f.mark for fname in annot for f in annot[fname])))
+    # # labelset = sorted(k for k in counts if counts[k] >= min_samples)
+    # label2idx = dict(zip(labelset, range(len(labelset))))
+    # nsamples = sum(imap(len, annot.itervalues()))
 
     frate = 100
     encoder = spectral.Spectral(nfilt=nfilt, fs=16000, wlen=0.025, frate=frate,
                                 compression='log', nfft=1024, do_dct=False,
                                 do_deltas=False, do_deltasdeltas=False)
 
-    X = np.empty((nsamples, nframes*nfilt), dtype=np.double)
-    y = np.empty((nsamples,), dtype=np.uint8)
-    idx = 0
-    for fname in annot:
-        spec = load_wav(path.join(BASEDIR, monkey, 'audio', fname + '.wav'),
-                        encoder)
-        for fragment in annot[fname]:
-            start_frame = int(fragment.interval.start * frate)
-            if start_frame + nframes >= spec.shape[0]:
-                s = spec[start_frame: start_frame + nframes]
-                extra_zeros = np.zeros((start_frame + nframes - spec.shape[0],
-                                        nfilt),
-                                       dtype=s.dtype)
-                x = np.vstack((s, extra_zeros))
-                X[idx] = np.hstack(x)
-            else:
-                X[idx] = np.hstack(spec[start_frame: start_frame + nframes])
-            y[idx] = label2idx[fragment.mark]
-            idx += 1
-    return X[:idx], y[:idx], labelset
+    X, y, labelset = load_data_stacked_annot(monkey, annot, encoder, nframes)
+    return X, y, labelset
 
 
 def load_wav(wavfile, encoder):
@@ -141,3 +159,38 @@ def load_wav(wavfile, encoder):
         warnings.warn('stereo audio found, will merge channels')
         sig = (sig[:, 0] + sig[:, 1]) / 2
     return encoder.transform(sig)
+
+
+def train_test_split_files(annot, test_size=0.2):
+    """Split files in annotation in training and test set,
+    preserving distribution of labels
+
+    :param annot: dict from filename to list of fragments
+    :param test_size: proportion of test wrt train set
+
+    :return
+      train: list of filenames
+      test: list of filenames
+    """
+    filenames  = sorted(annot.keys())
+    counts = [Counter(f.mark for f in annot[fname])
+              for fname in filenames]
+    total = reduce(add, counts)
+    target = {k: int(total[k] * (1-test_size)) for k in total}
+
+    # BRUUUUUUTEFOOOOOORCE!!!!
+    mincost = np.inf
+    bestsol = None
+    for indices in chain.from_iterable(combinations(xrange(len(counts)), k)
+                                       for k in xrange(1, len(counts)+1)):
+        counter = reduce(add, [counts[i] for i in indices])
+        cost = sum(abs(target[k] - counter[k]) for k in target)
+        if cost < mincost:
+            mincost = cost
+            bestsol = indices
+
+    bestsol = set(bestsol)
+
+    train = [filenames[i] for i in bestsol]
+    test = [f for idx, f in enumerate(filenames) if not idx in bestsol]
+    return train, test

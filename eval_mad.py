@@ -152,16 +152,20 @@ def get_exp_call_activity(monkey, winsize_sec, hopsize_sec,
             total_call, total, total_call * 100 / total)
     return calls
 
+
 def get_lambda_est(monkey):
-    with open('/home/mwv/data/monkey_sounds/pred_lambdas_{0}.pkl'.format(monkey), 'rb') as fid:
+    with open(path.join(BASEDIR, 'pred_lambdas_{0}.pkl'.format(monkey)),
+              'rb') as fid:
         p = pickle.load(fid)
     return {k.replace(' ', '_'): expit(v) for k, v in p.iteritems()}
+
 
 def lambda_to_starts(lambda_est, threshold, winhop=0.025):
     """Return time in sec where lambda_est starts to go above threshold
     """
     l_th = lambda_est > threshold
     return np.where(((np.roll(l_th, 1) - l_th) != 0).astype(int))[0][::2] * winhop
+
 
 def get_pred_starts(lambda_ests, threshold):
     return {k: lambda_to_starts(v, threshold)
