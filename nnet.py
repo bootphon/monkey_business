@@ -320,8 +320,8 @@ class RegularizedNet(NeuralNet):
                  layers_sizes=[1024, 1024, 1024],
                  n_outs=2,
                  rho=0.9, eps=1.E-6,
-                 L1_reg=0.,
-                 L2_reg=0.,
+                 L1_reg=1.,
+                 L2_reg=1.,
                  debugprint=False):
         """
         TODO
@@ -434,9 +434,6 @@ def add_fit_score_predict(class_to_chg):
             self._train_errors = []
             self._dev_errors = []
             self._updates = []
-
-        seen = numpy.zeros(((x_train.shape[0]+BATCH_SIZE-1) / BATCH_SIZE,), dtype=numpy.bool)
-        n_seen = 0
 
         while epoch < max_epochs:
             if not verbose:
