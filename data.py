@@ -179,15 +179,18 @@ def train_test_split_files(annot, test_size=0.2):
     target = {k: int(total[k] * (1-test_size)) for k in total}
 
     # BRUUUUUUTEFOOOOOORCE!!!!
+    cutoff = 20
     mincost = np.inf
     bestsol = None
     for indices in chain.from_iterable(combinations(xrange(len(counts)), k)
-                                       for k in xrange(1, len(counts)+1)):
+                                       for k in xrange(1, len(counts)-1)):
         counter = reduce(add, [counts[i] for i in indices])
         cost = sum(abs(target[k] - counter[k]) for k in target)
         if cost < mincost:
             mincost = cost
             bestsol = indices
+        if mincost < cutoff:
+            break
 
     bestsol = set(bestsol)
 
