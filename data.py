@@ -27,12 +27,12 @@ from operator import add
 
 import numpy as np
 import scipy.signal
-from scikits.audiolab import wavread
+from scipy.io import wavfile as siowavfile
 
 import spectral
 from textgrid import TextGrid
 
-BASEDIR = path.join(os.environ['HOME'], 'data', 'monkey_sounds')
+BASEDIR = "/fhgfs/bootphon/scratch/gsynnaeve/monkey_sounds"
 
 Interval = namedtuple('Interval', ['start', 'end'])
 Fragment = namedtuple('Fragment', ['filename', 'interval', 'mark'])
@@ -153,7 +153,7 @@ def load_wav(wavfile, encoder, highpass=None):
 
     :return nframes x nfilts array
     """
-    sig, fs, _ = wavread(wavfile)
+    fs, sig = siowavfile.read(wavfile)
     if not highpass is None:
         cutoff = highpass / (0.5 * fs)
         b, a = scipy.signal.butter(5, cutoff, btype='highpass')
