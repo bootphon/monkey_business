@@ -26,6 +26,7 @@ from collections import Counter
 from operator import add
 
 import numpy as np
+import scipy.signal
 from scikits.audiolab import wavread
 
 import spectral
@@ -84,7 +85,7 @@ def stack_all(a, nframes):
                      for i in xrange(nframes))[:a.shape[0] - nframes + 1]
 
 
-def load_data_stacked_annot(monkey, annot, encoder, nframes):
+def load_data_stacked_annot(monkey, annot, encoder, nframes, highpass=None):
     labelset = sorted(list(set(f.mark for fname in annot
                                for f in annot[fname])))
     label2idx = dict(zip(labelset, range(len(labelset))))
@@ -98,7 +99,7 @@ def load_data_stacked_annot(monkey, annot, encoder, nframes):
     idx = 0
     for fname in annot:
         spec = load_wav(path.join(BASEDIR, monkey, 'audio', fname + '.wav'),
-                        encoder)
+                        encoder, highpass=highpass)
         for fragment in annot[fname]:
             X[idx] = stack_up(spec, int(fragment.interval.start * frate),
                               nframes)
@@ -142,16 +143,22 @@ def load_data_stacked(monkey, nframes=30, nfilt=40, include_noise=False,
     return X, y, labelset
 
 
-def load_wav(wavfile, encoder):
+def load_wav(wavfile, encoder, highpass=None):
     """Load audio from wave file and do spectral transform
 
     Arguments:
     :param wavfile: audio filename
     :param encoder: Spectral object
+    :param highpass: filter first at frequency, if None don't filter
 
     :return nframes x nfilts array
     """
     sig, fs, _ = wavread(wavfile)
+    if not highpass is None:
+        cutoff = highpass / (0.5 * fs)
+        b, a = scipy.signal.butter(5, cutoff, btype='highpass')
+        sig = scipy.signal.lfilter(b, a, sig)
+
     if encoder.config['fs'] != fs:
         raise ValueError('sampling rate should be {0}, not {1}. '
                          'please resample.'.format(encoder.config['fs'], fs))
@@ -179,15 +186,18 @@ def train_test_split_files(annot, test_size=0.2):
     target = {k: int(total[k] * (1-test_size)) for k in total}
 
     # BRUUUUUUTEFOOOOOORCE!!!!
+    cutoff = 20
     mincost = np.inf
     bestsol = None
     for indices in chain.from_iterable(combinations(xrange(len(counts)), k)
-                                       for k in xrange(1, len(counts)+1)):
+                                       for k in xrange(1, len(counts)-1)):
         counter = reduce(add, [counts[i] for i in indices])
         cost = sum(abs(target[k] - counter[k]) for k in target)
         if cost < mincost:
             mincost = cost
             bestsol = indices
+        if mincost < cutoff:
+            break
 
     bestsol = set(bestsol)
 
