@@ -76,9 +76,9 @@ def get_annotation(monkey, include_noise=False):
     return annot
 
 
-def reduced_annotation(monkey, min_samples=50):
+def reduced_annotation(monkey, min_samples=50, include_noise=True):
     """Load annotation for monkey and replace labels that occur less than
-    min_samples times with 'NOISE_ACT', the noise_1 label
+    min_samples times with 'NOISE', the noise_1 label
 
     :param monkey: monkey
     :param min_samples: labels with less than this amount are relabelled as noise_1
@@ -98,6 +98,9 @@ def reduced_annotation(monkey, min_samples=50):
                                      f.interval,
                                      'NOISE')) for f in v]
              for k, v in annot.iteritems()}
+    if not include_noise:
+        annot = {k: [f for f in v if f.mark != 'NOISE']
+                 for k, v in annot.iteritems()}
     return annot
 
 
