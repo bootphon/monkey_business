@@ -18,6 +18,7 @@ number of training samples
 """
 
 from __future__ import division
+import os
 import os.path as path
 import cPickle as pickle
 from pprint import pformat
