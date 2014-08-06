@@ -135,8 +135,8 @@ def print_cm(stream, cm, target_names=None, vert_labels=False):
         print >>stream, name + ' ' + vline
 
 
-def classification_by_monkey(X, y, labelset, stream, n_folds=5,
-                             do_gridsearch=True,
+def classification_by_monkey(X, y, labelset, param_grid, stream,
+                             n_folds_test=10, n_folds_gridsearch=5,
                              verbose=True):
     for monkey in MONKEYS:
         if verbose:
@@ -151,7 +151,7 @@ def classification_by_monkey(X, y, labelset, stream, n_folds=5,
         pvals = None
         print >>stream, '\n**** Cross-validation scores\n'
 
-        for fold in range(n_folds):
+        for fold in range(n_folds_test):
             if verbose:
                 print '  FOLD:', fold
             X_train, X_test, y_train, y_test = train_test_split(X[monkey],
@@ -159,21 +159,15 @@ def classification_by_monkey(X, y, labelset, stream, n_folds=5,
                                                                 test_size=0.1)
             if verbose:
                 print 'training classifier...'
-            if do_gridsearch:
-                clf = GridSearchCV(SVC(),
-                                   [{'kernel': ['rbf'],
-                                     'gamma': [1e-4],
-                                     'C': np.logspace(0, 2, 10)},
-                                   ],
-                                   cv=3, score_func=metrics.f1_score,
-                                   verbose=1 if verbose else 0, n_jobs=-1)
-            else:
-                clf = SVC(kernel='rbf', C=1)
+            clf = GridSearchCV(SVC(),
+                               param_grid,
+                               cv=n_folds_gridsearch,
+                               scoring='f1',
+                               verbose=1 if verbose else 0, n_jobs=-1)
             clf.fit(X_train, y_train)
 
-            if do_gridsearch:
-                print >>stream, 'FOLD:', fold, clf.best_score_
-                print >>stream, pformat(clf.best_params_)
+            print >>stream, 'FOLD:', fold, clf.best_score_
+            print >>stream, pformat(clf.best_params_)
 
             if verbose:
                 print 'predicting class labels...'
@@ -193,11 +187,11 @@ def classification_by_monkey(X, y, labelset, stream, n_folds=5,
                  labelset[monkey])
         print >>stream, ''
         stream.flush()
-        with open('clf_by_monkey_{0}.pkl'.format(monkey), 'wb') as fid:
+        with open('results/clf_by_monkey_{0}.pkl'.format(monkey), 'wb') as fid:
             pickle.dump((y_true, y_pred, pvals, labelset[monkey]), fid, -1)
 
-def classification_across_monkey(X, y, labelset, stream, n_folds=5,
-                                 do_gridsearch=True,
+def classification_across_monkey(X, y, labelset, param_grid, stream,
+                                 n_folds_test=5, n_folds_gridsearch=5,
                                  verbose=True):
     X_comb, y_comb, labelset_comb = combine_labels(X, y, labelset)
 
@@ -206,27 +200,19 @@ def classification_across_monkey(X, y, labelset, stream, n_folds=5,
     y_pred = None
     pvals = None
 
-    for fold in range(n_folds):
+    for fold in range(n_folds_test):
         X_train, X_test, y_train, y_test = train_test_split(X_comb, y_comb,
                                                             test_size=0.1)
         if verbose:
             print 'training classifier...'
-        if do_gridsearch:
-            clf = GridSearchCV(SVC(),
-                               [{'kernel':['rbf'],
-                                 'gamma': [1e-5],
-                                 'C': np.logspace(1, 3, 10)},
-                                # {'kernel': ['linear'],
-                                #  'C': np.logspace(0, 3, 10)}],
-                                ],
-                               cv=3, score_func=metrics.f1_score,
-                               verbose=1 if verbose else 0, n_jobs=-1)
-        else:
-            clf = SVC(kernel='rbf', C=1)
+        clf = GridSearchCV(SVC(),
+                           param_grid,
+                           cv=n_folds_gridsearch,
+                           scoring='f1',
+                           verbose=1 if verbose else 0, n_jobs=-1)
         clf.fit(X_train, y_train)
-        if do_gridsearch:
-            print >>stream, 'FOLD:', fold, clf.best_score_
-            print >>stream, pformat(clf.best_params_)
+        print >>stream, 'FOLD:', fold, clf.best_score_
+        print >>stream, pformat(clf.best_params_)
 
         if y_true is None:
             y_true = y_test
@@ -245,37 +231,33 @@ def classification_across_monkey(X, y, labelset, stream, n_folds=5,
              labelset_comb)
     print >>stream, ''
     stream.flush()
-    with open('clf_across_monkey.pkl', 'wb') as fid:
+    with open('results/clf_across_monkey.pkl', 'wb') as fid:
         pickle.dump((y_true, y_pred, pvals, labelset_comb), fid, -1)
 
 
-def classification_by_species(X, y, labelset, stream, n_folds=5,
-                              do_gridsearch=True, verbose=True):
+def classification_by_species(X, y, labelset, param_grid, stream,
+                              n_folds_test=10, n_folds_gridsearch=5,
+                              verbose=True):
     X_comb, y_comb, labelset_comb = make_monkey_set(X, y, labelset)
 
     y_true = None
     y_pred = None
     pvals = None
     print >>stream, '*** Cross-validation scores\n'
-    for fold in range(n_folds):
+    for fold in range(n_folds_test):
         if verbose:
             print '  FOLD:', fold
         X_train, X_test, y_train, y_test = train_test_split(X_comb, y_comb,
                                                             test_size=0.1)
-        if do_gridsearch:
-            clf = GridSearchCV(SVC(),
-                               [{'kernel': ['rbf'],
-                                 'gamma': np.logspace(-5, -3, 3),
-                                 'C': np.logspace(0, 3, 10)}],
-                               cv=3, score_func=metrics.f1_score,
-                               verbose=1 if verbose else 0, n_jobs=-1)
-        else:
-            clf = SVC(kernel='rbf', C=1)
+        clf = GridSearchCV(SVC(),
+                           param_grid,
+                           cv=n_folds_gridsearch,
+                           scoring='f1',
+                           verbose=1 if verbose else 0, n_jobs=-1)
         clf.fit(X_train, y_train)
 
-        if do_gridsearch:
-            print >>stream, 'FOLD:', fold, clf.best_score_
-            print >>stream, pformat(clf.best_params_)
+        print >>stream, 'FOLD:', fold, clf.best_score_
+        print >>stream, pformat(clf.best_params_)
         if y_true is None:
             y_true = y_test
             y_pred = clf.predict(X_test)
@@ -293,12 +275,13 @@ def classification_by_species(X, y, labelset, stream, n_folds=5,
              labelset_comb)
     print >>stream, ''
     stream.flush()
-    with open('clf_species.pkl', 'wb') as fid:
+    with open('results/clf_species.pkl', 'wb') as fid:
         pickle.dump((y_true, y_pred, pvals, labelset_comb), fid, -1)
 
 
-def replicate(resultfile, n_folds=5, do_gridsearch=True, verbose=True):
+def replicate(resultfile, n_folds_test=10, n_folds_gridsearch=5, verbose=True):
     X, y, labelset = load_all_monkeys()
+    from svc_param_grid import param_grid
 
     with open(resultfile, 'w') as stream:
         print >>stream, '* Replication of Mielke & Zuberbuehler'
@@ -330,8 +313,9 @@ This file was automatically generated by running `mielke_replication.py`.
 
         print >>stream, '** CLASSIFICATION BY MONKEY'
 
-        classification_by_monkey(X, y, labelset, stream, n_folds=n_folds,
-                                 do_gridsearch=do_gridsearch,
+        classification_by_monkey(X, y, labelset, param_grid, stream,
+                                 n_folds_test=n_folds_test,
+                                 n_folds_gridsearch=n_folds_gridsearch,
                                  verbose=verbose)
 
         # 2. classify over all monkeys and calls
@@ -340,9 +324,10 @@ This file was automatically generated by running `mielke_replication.py`.
             print '2. CLASSIFICATION ACROSS MONKEY'
             print '-------------------------------'
         print >>stream, '** CLASSIFICATION ACROSS MONKEYS'
-        classification_across_monkey(X, y, labelset, stream, n_folds=n_folds,
-                                    do_gridsearch=do_gridsearch,
-                                    verbose=verbose)
+        classification_across_monkey(X, y, labelset, param_grid, stream,
+                                     n_folds_test=n_folds_test,
+                                     n_folds_gridsearch=n_folds_gridsearch,
+                                     verbose=verbose)
 
         # 3. classify the monkeys
         if verbose:
@@ -350,10 +335,19 @@ This file was automatically generated by running `mielke_replication.py`.
             print '3. CLASSIFICATION BY SPECIES'
             print '----------------------------'
         print >>stream, '** CLASSIFICATION BY SPECIES'
-        classification_by_species(X, y, labelset, stream, n_folds=n_folds,
-                                  do_gridsearch=do_gridsearch,
+        classification_by_species(X, y, labelset, param_grid, stream,
+                                  n_folds_test=n_folds_test,
+                                  n_folds_gridsearch=n_folds_gridsearch,
                                   verbose=verbose)
 
 
 if __name__ == '__main__':
-    replicate('mielke_results.org')
+    n_folds_test = 10
+    n_folds_gridsearch = 5
+    try:
+        os.makedirs('results')
+    except OSError:
+        pass
+    replicate('results/mielke_results.org',
+              n_folds_gridsearch=n_folds_gridsearch,
+              n_folds_test=n_folds_test)
