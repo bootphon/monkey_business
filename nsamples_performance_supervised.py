@@ -19,21 +19,15 @@ number of training samples
 
 from __future__ import division
 import os
-import os.path as path
-import cPickle as pickle
-from pprint import pformat
 import warnings
 warnings.filterwarnings('ignore')
 
 import numpy as np
-from scipy.special import expit
 
 from sklearn.cross_validation import train_test_split, StratifiedKFold
 from sklearn.svm import SVC
 from sklearn.grid_search import GridSearchCV
 import sklearn.metrics as metrics
-
-from data import BASEDIR, load_data_stacked
 
 MONKEYS = ['Titi_monkeys', 'Blue_monkeys', 'colobus', 'Blue_monkeys_Fuller']
 
@@ -68,7 +62,7 @@ def stratified_sample(X, y, n):
 def classification_by_monkey(X, y, labelset, param_grid,
                              n_steps=20, n_folds_test=20, n_folds_gridsearch=5,
                              verbose=True):
-    for monkey in MONKEYS:
+    for monkey in X.keys():
         if verbose:
             print monkey
         scores = np.zeros((n_steps, 6))
@@ -109,7 +103,7 @@ def classification_by_monkey(X, y, labelset, param_grid,
                 metrics.precision_recall_fscore_support(y_true, y_pred,
                                                         average='weighted')[:-1],
                                       [metrics.accuracy_score(y_true, y_pred)]))
-        np.savetxt('results/clf_by_nsamples_{0}.txt'.format(monkey),
+        np.savetxt('results/clf_by_nsamples_{0}_blue_merged.txt'.format(monkey),
                    scores, fmt=['%.0f','%.0f', '%.3f','%.3f','%.3f', '%.3f'],
                    delimiter='\t',
                    header='nsamples\tsupport\tprecision\trecall\tfscore\taccuracy')
@@ -160,7 +154,7 @@ def classification_across_monkey(X, y, labelset, param_grid,
                                   metrics.precision_recall_fscore_support(y_true, y_pred,
                                                                           average='weighted')[:-1],
                                   [metrics.accuracy_score(y_true, y_pred)]))
-    np.savetxt('results/clf_across_nsamples.txt',
+    np.savetxt('results/clf_across_nsamples_blue_merged.txt',
                scores, fmt=['%.0f','%.0f', '%.3f','%.3f','%.3f', '%.3f'],
                delimiter='\t',
                header='nsamples\tsupport\tprecision\trecall\tfscore\taccuracy')

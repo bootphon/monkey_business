@@ -60,6 +60,10 @@ def load_all_monkeys():
         for monkey in MONKEYS:
             print '  ', monkey
             X_, y_, labelset_ = load_data_stacked(monkey)
+            # remap James' labels
+
+
+
             labelset[monkey] = labelset_
             X[monkey] = X_
             y[monkey] = y_
@@ -67,6 +71,35 @@ def load_all_monkeys():
         with open(_memo_fname, 'wb') as fid:
             pickle.dump((X, y, labelset), fid, -1)
     return X, y, labelset
+
+
+def merge_blue(X, y, labelset):
+    X_new = {k: v for k, v in X.iteritems() if not k.startswith('Blue')}
+    y_new = {k: v for k, v in y.iteritems() if not k.startswith('Blue')}
+    labelset_new = {k: v for k, v in labelset.iteritems()
+                    if not k.startswith('Blue')}
+    X_murphy, y_murphy, labelset_murphy = \
+        X['Blue_monkeys'], y['Blue_monkeys'], labelset['Blue_monkeys']
+    X_fuller, y_fuller, labelset_fuller = \
+        X['Blue_monkeys_Fuller'], y['Blue_monkeys_Fuller'], \
+        labelset['Blue_monkeys_Fuller']
+
+    remap = {'A': 'p', 'KA': 'h', 'KATR':'h', 'PY':'p'}
+    remap_inds = {label:None for label in set(remap.values())}
+    for idx, label in enumerate(labelset_fuller):
+        newlabel = remap[label]
+        if remap_inds[newlabel] is None:
+            remap_inds[newlabel] = np.nonzero(y_fuller==idx)[0]
+        else:
+            remap_inds[newlabel] = np.hstack((remap_inds[newlabel], np.nonzero(y_fuller==idx)[0]))
+    remap_inds = {k: np.sort(v) for k, v in remap_inds.iteritems()}
+    y_new = np.zeros(y_fuller.shape, dtype=np.uint8)
+    y_new[remap_inds[labelset_murphy[1]]] = 1
+
+    X_new['Blue'] = np.vstack((X_murphy, X_fuller))
+    y_new['Blue'] = np.hstack((y_murphy, y_new))
+    labelset_new['Blue'] = labelset_murphy
+    return X_new, y_new, labelset_new
 
 
 def combine_labels(X, y, labelset):
@@ -138,7 +171,7 @@ def print_cm(stream, cm, target_names=None, vert_labels=False):
 def classification_by_monkey(X, y, labelset, param_grid, stream,
                              n_folds_test=10, n_folds_gridsearch=5,
                              verbose=True):
-    for monkey in MONKEYS:
+    for monkey in X.keys():
         if verbose:
             print '-' * len(monkey)
             print monkey
@@ -187,7 +220,7 @@ def classification_by_monkey(X, y, labelset, param_grid, stream,
                  labelset[monkey])
         print >>stream, ''
         stream.flush()
-        with open('results/clf_by_monkey_{0}.pkl'.format(monkey), 'wb') as fid:
+        with open('results/clf_by_monkey_{0}_blue_merged.pkl'.format(monkey), 'wb') as fid:
             pickle.dump((y_true, y_pred, pvals, labelset[monkey]), fid, -1)
 
 def classification_across_monkey(X, y, labelset, param_grid, stream,
@@ -231,7 +264,7 @@ def classification_across_monkey(X, y, labelset, param_grid, stream,
              labelset_comb)
     print >>stream, ''
     stream.flush()
-    with open('results/clf_across_monkey.pkl', 'wb') as fid:
+    with open('results/clf_across_monkey_blue_merged.pkl', 'wb') as fid:
         pickle.dump((y_true, y_pred, pvals, labelset_comb), fid, -1)
 
 
@@ -275,12 +308,12 @@ def classification_by_species(X, y, labelset, param_grid, stream,
              labelset_comb)
     print >>stream, ''
     stream.flush()
-    with open('results/clf_species.pkl', 'wb') as fid:
+    with open('results/clf_species_blue_merged.pkl', 'wb') as fid:
         pickle.dump((y_true, y_pred, pvals, labelset_comb), fid, -1)
 
 
 def replicate(resultfile, n_folds_test=10, n_folds_gridsearch=5, verbose=True):
-    X, y, labelset = load_all_monkeys()
+    X, y, labelset = merge_blue(*load_all_monkeys())
     from svc_param_grid import param_grid
 
     with open(resultfile, 'w') as stream:
@@ -348,6 +381,6 @@ if __name__ == '__main__':
         os.makedirs('results')
     except OSError:
         pass
-    replicate('results/mielke_results.org',
+    replicate('results/mielke_results_blue_merged.org',
               n_folds_gridsearch=n_folds_gridsearch,
               n_folds_test=n_folds_test)
