@@ -74,9 +74,9 @@ def load_all_monkeys():
 
 
 def merge_blue(X, y, labelset):
-    X_new = {k: v for k, v in X.iteritems() if not k.startswith('Blue')}
-    y_new = {k: v for k, v in y.iteritems() if not k.startswith('Blue')}
-    labelset_new = {k: v for k, v in labelset.iteritems()
+    X_merged = {k: v for k, v in X.iteritems() if not k.startswith('Blue')}
+    y_merged = {k: v for k, v in y.iteritems() if not k.startswith('Blue')}
+    labelset_merged = {k: v for k, v in labelset.iteritems()
                     if not k.startswith('Blue')}
     X_murphy, y_murphy, labelset_murphy = \
         X['Blue_monkeys'], y['Blue_monkeys'], labelset['Blue_monkeys']
@@ -96,10 +96,10 @@ def merge_blue(X, y, labelset):
     y_new = np.zeros(y_fuller.shape, dtype=np.uint8)
     y_new[remap_inds[labelset_murphy[1]]] = 1
 
-    X_new['Blue'] = np.vstack((X_murphy, X_fuller))
-    y_new['Blue'] = np.hstack((y_murphy, y_new))
-    labelset_new['Blue'] = labelset_murphy
-    return X_new, y_new, labelset_new
+    X_merged['Blue'] = np.vstack((X_murphy, X_fuller))
+    y_merged['Blue'] = np.hstack((y_murphy, y_new))
+    labelset_merged['Blue'] = labelset_murphy
+    return X_merged, y_merged, labelset_merged
 
 
 def combine_labels(X, y, labelset):
