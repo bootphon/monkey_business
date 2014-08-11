@@ -17,7 +17,7 @@
 
 from __future__ import division
 
-from __future__ import division
+from collections import defaultdict
 import scikits.audiolab as audiolab
 import os
 import os.path as path
@@ -35,27 +35,27 @@ def rglob(rootdir, pattern):
                 yield path.join(root, basename)
 
 
-def get_Lambda_single(wavfile, vad):
+def get_Lambda_single(monkey, wavfile, vad):
     sig, fs, _ = audiolab.wavread(wavfile)
-    return path.splitext(path.basename(wavfile))[0], vad.calc_Lambda(sig, fs)
+    return monkey, path.splitext(path.basename(wavfile))[0], vad.calc_Lambda(sig, fs)
 
-
-def pred_Lambdas(monkey, n_cores=20):
-    wavfiles = sorted(list(rglob(path.join(BASEDIR, monkey), '*.wav')))
-
+def pred_Lambdas_all(n_cores=20):
     p = Parallel(n_jobs=n_cores, verbose=11)(delayed(get_Lambda_single)
-                                             (w, mad.MAD(epsilon=1e-4,
-                                                         NFFT=512))
-                                             for w in wavfiles)
-    return dict(p)
+                   (monkey, w, mad.MAD(epsilon=1e-4, NFFT=512))
+                   for monkey in MONKEYS
+                   for w in sorted(list(rglob(path.join(BASEDIR, monkey),
+                                              '*.wav'))))
+    return p
 
 BASEDIR = path.join(os.environ['HOME'], 'data', 'monkey_sounds')
-MONKEYS = ['Titi_monkeys', 'Blue_monkeys', 'colobus']
-NCORES = 20
+MONKEYS = ['Titi_monkeys', 'Blue_monkeys', 'colobus', 'Blue_monkeys_Fuller']
+NCORES = 40
 
 if __name__ == '__main__':
-    for monkey in MONKEYS:
-        print monkey
-        pred_lambdas = pred_Lambdas(monkey, n_cores=NCORES)
-        with open('pred_lambdas_{0}.pkl'.format(monkey), 'wb') as fid:
-            pickle.dump(pred_lambdas, fid, -1)
+    p = pred_Lambdas_all(n_cores=NCORES)
+    r = defaultdict(dict)
+    for monkey, fname, arr in p:
+        r[monkey][fname] = arr
+    for monkey in r:
+        with open(path.join(BASEDIR, 'mad_{0}.pkl'.format(monkey)), 'wb') as fid:
+            pickle.dump(r[monkey], fid, -1)
