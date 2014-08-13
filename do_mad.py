@@ -119,7 +119,6 @@ if __name__ == '__main__':
     exp_calls_all = {monkey: get_exp_call_activity(monkey, 0.05, 0.025)
                      for monkey in MONKEYS}
     for highpass in highpasses:
-
         p = calc_activation(n_cores=NCORES, highpass=highpass)
         r = defaultdict(dict)
         for monkey, fname, arr in p:
@@ -130,7 +129,7 @@ if __name__ == '__main__':
             exp_calls = exp_calls_all[monkey]
             keys = sorted(list(set(exp_calls.keys()).intersection(set(r[monkey].keys()))))
             activation = np.hstack((r[monkey][k] for k in keys))
-            exp_calls = np.hstack((r[monkey][k] for k in keys))
+            exp_calls = np.hstack((exp_calls[k] for k in keys))
 
             fpr, tpr, _ = roc_curve(exp_calls, activation)
             auc_score += auc(fpr, tpr)
