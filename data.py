@@ -60,7 +60,7 @@ def get_annotation(monkey, include_noise=False):
     for tgfile in rglob(path.join(monkeydir, 'textgrids'), '*.TextGrid'):
         filename = path.splitext(path.basename(tgfile))[0]
         if not path.exists(path.join(monkeydir, 'audio', filename + '.wav')):
-            print 'missing audio file:', filename + '.wav'
+            print 'missing audio file:', monkey, filename + '.wav'
             continue
         tg = TextGrid.read(tgfile)
         tier = tg.tiers[0]
@@ -185,11 +185,7 @@ def load_wav(wavfile, encoder, highpass=None):
 
     :return nframes x nfilts array
     """
-    fs, sig = siowavfile.read(wavfile)
-    if not highpass is None:
-        cutoff = highpass / (0.5 * fs)
-        b, a = scipy.signal.butter(5, cutoff, btype='highpass')
-        sig = scipy.signal.lfilter(b, a, sig)
+    sig, fs = wavread(wavfile, highpass=highpass)
 
     if encoder.config['fs'] != fs:
         raise ValueError('sampling rate should be {0}, not {1}. '
@@ -198,6 +194,15 @@ def load_wav(wavfile, encoder, highpass=None):
         warnings.warn('stereo audio found, will merge channels')
         sig = (sig[:, 0] + sig[:, 1]) / 2
     return encoder.transform(sig)
+
+
+def wavread(wavfile, highpass=None):
+    fs, sig = siowavfile.read(wavfile)
+    if not highpass is None:
+        cutoff = highpass / (0.5 * fs)
+        b, a = scipy.signal.butter(5, cutoff, btype='highpass')
+        sig = scipy.signal.lfilter(b, a, sig)
+    return sig, fs
 
 
 def train_test_split_files(annot, test_size=0.2):
