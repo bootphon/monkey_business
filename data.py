@@ -112,7 +112,11 @@ def stack_from_frame(spec, start_frame, nframes):
     return x
 
 
-def stack_array(arr, nframes):
+def stack_array(arr, nframes, pad=False):
+    if pad:
+        arr = np.vstack((np.zeros((nframes//2, arr.shape[1])),
+                         arr,
+                         np.zeros((nframes//2, arr.shape[1]))))
     return np.hstack(np.roll(arr, -i, 0)
                      for i in xrange(nframes))[:arr.shape[0] - nframes + 1]
 
