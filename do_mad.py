@@ -32,6 +32,9 @@ from joblib import delayed, Parallel
 import data
 import mad
 
+FRATE = 100
+WINSIZE = 0.025
+
 def rglob(rootdir, pattern):
     for root, _, files in os.walk(rootdir):
         for basename in files:
@@ -41,14 +44,20 @@ def rglob(rootdir, pattern):
 
 def calc_activation_single(monkey, wavfile, vad, highpass=None):
     sig, fs = data.wavread(wavfile, highpass=highpass)
-    return monkey, path.splitext(path.basename(wavfile))[0], vad.calc_Lambda(sig, fs)
+    return (monkey,
+            path.splitext(path.basename(wavfile))[0],
+            vad.calc_Lambda(sig, fs))
 
 def calc_activation(n_cores=20, highpass=None):
     p = Parallel(n_jobs=n_cores,
                  verbose=0)(delayed(calc_activation_single)
-                             (monkey, w, mad.MAD(epsilon=1e-4, NFFT=512), highpass)
+                             (monkey, w, mad.MAD(epsilon=1e-4, NFFT=512,
+                                                 win_size_sec=WINSIZE,
+                                                 win_hop_sec=1/FRATE),
+                              highpass)
                              for monkey in MONKEYS
-                             for w in sorted(list(rglob(path.join(data.BASEDIR, monkey),
+                             for w in sorted(list(rglob(path.join(data.BASEDIR,
+                                                                  monkey),
                                                         '*.wav'))))
     return p
 
@@ -115,8 +124,8 @@ if __name__ == '__main__':
     best_auc = 0
     best_r = None
     best_hp = None
-    highpasses = np.arange(0, 2000, 100)
-    exp_calls_all = {monkey: get_exp_call_activity(monkey, 0.05, 0.025)
+    highpasses = np.arange(0, 4000, 100)
+    exp_calls_all = {monkey: get_exp_call_activity(monkey, WINSIZE, 1/FRATE)
                      for monkey in MONKEYS}
     for highpass in highpasses:
         p = calc_activation(n_cores=NCORES, highpass=highpass)
