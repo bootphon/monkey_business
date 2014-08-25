@@ -22,7 +22,7 @@ import cPickle as pickle
 
 
 import numpy as np
-from scipy.io import wavfile as siowavfile
+
 import scipy
 
 from sklearn.base import TransformerMixin, BaseEstimator
@@ -31,7 +31,7 @@ from sklearn.svm import SVC
 from sklearn.grid_search import GridSearchCV
 from sklearn.cross_validation import StratifiedKFold
 from sklearn.feature_selection import chi2, SelectPercentile
-
+from scikits.audiolab import wavread
 import spectral
 
 import data
@@ -41,26 +41,32 @@ _wav_cache = {}
 def _load_wav(fname, fs_=16000):
     key = fname
     if not key in _wav_cache:
-        fs, sig = siowavfile.read(fname)
+        sig, fs, _ = wavread(fname)
         if fs_ != fs:
             raise ValueError('sampling rate should be {0}, not {1}. '
                              'please resample.'.format(fs_, fs))
         if len(sig.shape) > 1:
             warnings.warn('stereo audio: merging channels')
             sig = (sig[:, 0] + sig[:, 1]) / 2
-        sig /= max(abs(sig))
+        # sig = sig / max(abs(sig))
         _wav_cache[key] = sig
     return _wav_cache[key]
 
+
+_spec_cache = {}
 def _load_spec(fname, nfilt, frate, highpass, fs=16000):
-    sig = _load_wav(fname, fs)
-    if highpass:
-        sig = hpfilter(sig, fs, highpass)
-    encoder = spectral.Spectral(nfilt=nfilt, fs=fs, wlen=0.025,
-                                frate=frate, compression='log',
-                                do_dct=False, do_deltas=False,
-                                do_deltasdeltas=False)
-    return encoder.transform(sig)
+    key = (fname, nfilt, frate, highpass)
+    if not key in _spec_cache:
+        sig = _load_wav(fname, fs)
+        if highpass:
+            sig = hpfilter(sig, fs, highpass)
+        encoder = spectral.Spectral(nfilt=nfilt, fs=fs, wlen=0.025,
+                                    frate=frate, compression='log',
+                                    do_dct=False, do_deltas=False,
+                                    do_deltasdeltas=False)
+        _spec_cache[key] = encoder.transform(sig)
+    return _spec_cache[key]
+
 
 _vad_cache = {}
 def _load_vad(monkey):
@@ -87,14 +93,14 @@ class AudioLoader(TransformerMixin, BaseEstimator):
     def transform(self, X, y=None, **transform_params):
         frate = 100
         specs = {}
-        for fname in X[:, 0]:
+        for fname in X[:, 1]:
             specs[fname] = _load_spec(fname, self.nfilt, frate, self.highpass)
 
         nsamples = X.shape[0]
         X_ = np.empty((nsamples, self.stacksize * self.nfilt),
                       dtype=np.double)
         for idx, fragment in enumerate(X):
-            filename, start = fragment
+            _, filename, start, _ = fragment
             X_[idx] = data.stack_from_frame(specs[filename],
                                             int(float(start) * frate),
                                             self.stacksize)
@@ -225,16 +231,17 @@ if __name__ == '__main__':
                              ('selector', SelectPercentile(chi2)),
                              ('svm', SVC())])
 
-        paramgrid = {'data__nfilt': range(10, 40, 5),
-                     'data__stacksize': range(11, 51, 2),
-                     'data__highpass': range(100, 2000, 100),
+        paramgrid = {'data__nfilt': range(10, 50, 10),
+                     'data__stacksize': range(11, 51, 8),
+                     'data__highpass': range(0, 2000, 250),
                      'data__normalize': [True, False],
-                     'selector__percentile': range(10, 100, 10),
+                     'selector__percentile': [10, 25, 50, 75, 100],
                      'svm__kernel': ['rbf'],
-                     'svm__C': np.logspace(0, 2, 10),
+                     'svm__C': np.logspace(0, 2, 20),
                      'svm__gamma': [1e-5]}
+
         clf = GridSearchCV(pipeline, paramgrid,
-                           cv=StratifiedKFold(y, n_fold=5), n_jobs=40)
+                           cv=StratifiedKFold(y, n_folds=5), n_jobs=40)
         clf.fit(X, y)
         with open(path.join(data.BASEDIR, 'sup_clf_{0}.pkl'.format(monkey)),
                   'wb') as fid:
