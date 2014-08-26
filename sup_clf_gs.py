@@ -28,9 +28,10 @@ import scipy
 from sklearn.base import TransformerMixin, BaseEstimator
 from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC
-from sklearn.grid_search import GridSearchCV
+from sklearn.grid_search import RandomizedSearchCV
 from sklearn.cross_validation import StratifiedKFold
-from sklearn.feature_selection import chi2, SelectPercentile
+from sklearn.feature_selection import SelectPercentile, f_classif
+from sklearn.cross_validation import train_test_split
 from scikits.audiolab import wavread
 import spectral
 
@@ -48,34 +49,18 @@ def _load_wav(fname, fs_=16000):
         if len(sig.shape) > 1:
             warnings.warn('stereo audio: merging channels')
             sig = (sig[:, 0] + sig[:, 1]) / 2
-        # sig = sig / max(abs(sig))
         _wav_cache[key] = sig
     return _wav_cache[key]
 
-
-_spec_cache = {}
 def _load_spec(fname, nfilt, frate, highpass, fs=16000):
-    key = (fname, nfilt, frate, highpass)
-    if not key in _spec_cache:
-        sig = _load_wav(fname, fs)
-        if highpass:
-            sig = hpfilter(sig, fs, highpass)
-        encoder = spectral.Spectral(nfilt=nfilt, fs=fs, wlen=0.025,
-                                    frate=frate, compression='log',
-                                    do_dct=False, do_deltas=False,
-                                    do_deltasdeltas=False)
-        _spec_cache[key] = encoder.transform(sig)
-    return _spec_cache[key]
-
-
-_vad_cache = {}
-def _load_vad(monkey):
-    if not monkey in _vad_cache:
-        with open(path.join(data.BASEDIR, 'mad_{0}.pkl'.format(monkey)),
-                  'rb') as fid:
-            _vad_cache[monkey] = pickle.load(fid)
-    return _vad_cache[monkey]
-
+    sig = _load_wav(fname, fs)
+    if highpass:
+        sig = hpfilter(sig, fs, highpass)
+    encoder = spectral.Spectral(nfilt=nfilt, fs=fs, wlen=0.025,
+                                frate=frate, compression='log',
+                                do_dct=False, do_deltas=False,
+                                do_deltasdeltas=False)
+    return encoder.transform(sig)
 
 def hpfilter(sig, fs, cutoff, order=5):
     cutoff = cutoff / (0.5 * fs)
@@ -121,8 +106,8 @@ def _load_files_labels(monkey, include_noise=False):
         labelset_orig = sorted(list(set(f.mark for fname in annot
                                    for f in annot[fname])))
         labelset_remapped = sorted(list(set(remap.itervalues())))
-        label2idx = {label: dict(zip(labelset_remapped),
-                                 range(len(labelset_remapped)))[remap[label]]
+        label2idx = {label: dict(zip(labelset_remapped,
+                                 range(len(labelset_remapped))))[remap[label]]
                      for label in labelset_orig}
         X = np.array([(monkey,
                        path.join(data.BASEDIR, dirname, 'audio',
@@ -225,25 +210,32 @@ def _load_files_labels(monkey, include_noise=False):
 if __name__ == '__main__':
     for monkey in ['Titi_monkeys', 'colobus', 'Blue_Fuller', 'Blue_Murphy',
                    'Blue_merged', 'all']:
+        print
+        print monkey
+        print
         X, y, labels = _load_files_labels(monkey, include_noise=False)
 
-        pipeline = Pipeline([('data', AudioLoader()),
-                             ('selector', SelectPercentile(chi2)),
-                             ('svm', SVC())])
+        X_train, X_test, y_train, y_test = train_test_split(X, y)
+        pipeline = Pipeline([('data', AudioLoader(highpass=None,
+                                                  normalize=True)),
+                             ('selector', SelectPercentile(f_classif)),
+                             ('svm', SVC(kernel='rbf', gamma=1e-5))])
 
-        paramgrid = {'data__nfilt': range(10, 50, 10),
-                     'data__stacksize': range(11, 51, 8),
-                     'data__highpass': range(0, 2000, 250),
-                     'data__normalize': [True, False],
-                     'selector__percentile': [10, 25, 50, 75, 100],
-                     'svm__kernel': ['rbf'],
-                     'svm__C': np.logspace(0, 2, 20),
-                     'svm__gamma': [1e-5]}
+        paramdist = {'data__nfilt': scipy.stats.randint(10, 50),
+                     'data__stacksize': scipy.stats.randint(11, 51),
+                     'selector__percentile': scipy.stats.randint(10, 100),
+                     'svm__C': np.logspace(0, 2, 50)}
 
-        clf = GridSearchCV(pipeline, paramgrid,
-                           cv=StratifiedKFold(y, n_folds=5), n_jobs=40)
-        clf.fit(X, y)
-        with open(path.join(data.BASEDIR, 'sup_clf_{0}.pkl'.format(monkey)),
+        clf = RandomizedSearchCV(pipeline, paramdist, verbose=3, n_iter=1000,
+                                 cv=StratifiedKFold(y_train, n_folds=2),
+                                 n_jobs=35)
+        clf.fit(X_train, y_train)
+        with open(path.join(data.BASEDIR, 'sup_clf_rand_{0}.pkl'.format(monkey)),
                   'wb') as fid:
-            pickle.dump(clf, fid, -1)
-        _wav_cache = {}
+            pickle.dump(clf.best_params_, fid, -1)
+
+        y_pred = clf.predict(X_test)
+        with open(path.join(data.BASEDIR, 'sup_clf_rand_results_{0}.pkl'.format(monkey)),
+                  'wb') as fid:
+            pickle.dump((y_test, y_pred, labels), fid, -1)
+        # _wav_cache = {}
