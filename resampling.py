@@ -22,6 +22,9 @@ import numpy as np
 class Resampler(object):
     def __init__(self, ratio=1.0, method='uniform'):
         assert(method in ['uniform', 'tomek'])
+        if method == 'tomek':
+            raise NotImplementedError('Tomek undersampling is not implemented.'
+                                      ' Use "uniform" instead.')
         self.method = method
         self.ratio = ratio
 
