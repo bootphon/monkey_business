@@ -224,15 +224,10 @@ def train_test_split_files(annot, test_size=0.2):
     counts = [Counter(f.mark for f in annot[fname])
               for fname in filenames]
     total = reduce(add, counts)
-    # target = {k: int(total[k] * (1-test_size)) for k in total}
-
     target = {k: int(total[k] * test_size) for k in total}
-
-    print ' ', target
 
     # BRUUUUUUTEFOOOOOORCE!!!!
     cutoff = sum(target.itervalues()) * 0.05
-    # print ' ', cutoff
     mincost = np.inf
     bestsol = None
     length_prev = -1
@@ -253,7 +248,6 @@ def train_test_split_files(annot, test_size=0.2):
         if cost < mincost:
             mincost = cost
             bestsol = indices
-            # print ' ', idx, mincost
         if mincost < cutoff:
             break
 
